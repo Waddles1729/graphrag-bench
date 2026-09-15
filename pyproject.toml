@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "graphrag-bench"
+version = "0.1.0"
+description = "Measure what a knowledge graph adds to retrieval, and what it costs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Masanari Makino" }]
+keywords = ["graphrag", "rag", "knowledge-graph", "retrieval", "neo4j", "evaluation"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+neo4j = ["neo4j>=5.0"]
+spacy = ["spacy>=3.7"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+graphrag-bench = "graphrag_bench.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Waddles1729/graphrag-bench"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/graphrag_bench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
