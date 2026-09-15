@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e '.[dev]'
+      - run: ruff check src tests
+      - run: pytest
+
+  # The benchmark is the deliverable, so CI runs it and checks the headline
+  # numbers are still the ones the README claims. A README that drifts from the
+  # code is worse than no README.
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e .
+      - name: extraction still recovers 67 of 68 relations
+        run: |
+          graphrag-bench extract --score | tee extract.txt
+          grep -q 'all relations *1.00 *0.99' extract.txt \
+            || { echo "::error::extraction scores moved"; exit 1; }
+          grep -q 'fraud-scoring DEPENDS_ON Sift' extract.txt \
+            || { echo "::error::the documented miss is no longer the miss"; exit 1; }
+      - name: the graph still answers every question kind at two hops
+        run: |
+          graphrag-bench bench | tee bench.txt
+          grep -qE 'graph\(gold\) +2 +impact +100%' bench.txt \
+            || { echo "::error::graph(gold) no longer reaches full support on impact"; exit 1; }
+          grep -q 'Never fully retrieved by vector' bench.txt \
+            || { echo "::error::passage retrieval now answers everything, which would be news"; exit 1; }
+      - run: graphrag-bench bench --hybrid > /dev/null
+      - run: graphrag-bench ask "If Stripe is unavailable, which services are affected?"
+
+  neo4j:
+    runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5-community
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+        ports:
+          - 7687:7687
+          - 7474:7474
+        options: >-
+          --health-cmd "wget -q -O /dev/null http://localhost:7474 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[neo4j,dev]'
+      - name: the two stores agree, and the benchmark runs on Neo4j
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: testpassword
+        run: pytest tests/test_neo4j_store.py -v
